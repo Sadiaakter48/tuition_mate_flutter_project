@@ -1,0 +1,29 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isWorkspaceMember(userId) {
+      return request.auth != null
+          && (request.auth.uid == userId
+              || (firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.workspaceId == userId
+                  && firestore.get(/databases/(default)/documents/users/$(userId)/members/$(request.auth.uid)).data.active == true));
+    }
+
+    match /users/{userId}/students/{studentId}/{fileName} {
+      allow read: if request.auth != null
+                  && fileName == 'profile.jpg'
+                  && (isWorkspaceMember(userId)
+                      || (request.auth.token.email_verified == true
+                          && firestore.get(/databases/(default)/documents/users/$(userId)/students/$(studentId)).data.guardianUid == request.auth.uid));
+      allow write: if request.auth != null
+                   && isWorkspaceMember(userId)
+                   && fileName == 'profile.jpg'
+                   && (request.resource == null
+                       || request.resource.size < 5 * 1024 * 1024
+                       && request.resource.contentType.matches('image/.*'));
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
